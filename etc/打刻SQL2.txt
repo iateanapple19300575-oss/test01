@@ -1,0 +1,330 @@
+/*-----------------------------------------
+  任意期間指定（ここを変えるだけでOK）
+-----------------------------------------*/
+DECLARE @StartDate DATE = '2026-02-01';
+DECLARE @EndDate   DATE = '2026-02-29';
+
+/*-----------------------------------------
+  主テーブルが無い日の扱い
+  0 = OK（0）
+  1 = NG（1）
+  2 = NULL（判定不能）
+-----------------------------------------*/
+DECLARE @MainMissingMode INT = 1;   -- ★必要に応じて変更
+
+
+/*-----------------------------------------
+  カレンダー生成（任意期間）
+-----------------------------------------*/
+WITH Calendar AS (
+    SELECT @StartDate AS WorkDate
+    UNION ALL
+    SELECT DATEADD(DAY, 1, WorkDate)
+    FROM Calendar
+    WHERE WorkDate < @EndDate
+),
+
+/*-----------------------------------------
+  スタッフ一覧（A/B/C/Main の全員）
+-----------------------------------------*/
+StaffList AS (
+    SELECT DISTINCT StaffId FROM MainTable
+    UNION
+    SELECT DISTINCT StaffId FROM TableA
+    UNION
+    SELECT DISTINCT StaffId FROM TableB
+    UNION
+    SELECT DISTINCT StaffId FROM TableC
+),
+
+/*-----------------------------------------
+  全スタッフ × 全日付（カレンダー方式）
+-----------------------------------------*/
+StaffDates AS (
+    SELECT s.StaffId, c.WorkDate
+    FROM StaffList s
+    CROSS JOIN Calendar c
+),
+
+/*-----------------------------------------
+  A/B/C の行番号付け（開始時間昇順）
+-----------------------------------------*/
+ARows AS (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY StaffId, WorkDate ORDER BY StartTime) AS RN
+    FROM TableA
+),
+BRows AS (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY StaffId, WorkDate ORDER BY StartTime) AS RN
+    FROM TableB
+),
+CRows AS (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY StaffId, WorkDate ORDER BY StartTime) AS RN
+    FROM TableC
+),
+
+/*-----------------------------------------
+  A/B/C の最小開始・最大終了
+-----------------------------------------*/
+AMinMax AS (
+    SELECT StaffId, WorkDate,
+           MIN(StartTime) AS AMinStart,
+           MAX(EndTime)   AS AMaxEnd
+    FROM TableA GROUP BY StaffId, WorkDate
+),
+BMinMax AS (
+    SELECT StaffId, WorkDate,
+           MIN(StartTime) AS BMinStart,
+           MAX(EndTime)   AS BMaxEnd
+    FROM TableB GROUP BY StaffId, WorkDate
+),
+CMinMax AS (
+    SELECT StaffId, WorkDate,
+           MIN(StartTime) AS CMinStart,
+           MAX(EndTime)   AS CMaxEnd
+    FROM TableC GROUP BY StaffId, WorkDate
+),
+
+/*-----------------------------------------
+  A/B/C の横展開（最大10件）
+-----------------------------------------*/
+AExpanded AS (
+    SELECT StaffId, WorkDate,
+        MAX(CASE WHEN RN=1 THEN WorkNo END) AS AWorkNo1,
+        MAX(CASE WHEN RN=1 THEN StartTime END) AS AStart1,
+        MAX(CASE WHEN RN=1 THEN EndTime END) AS AEnd1,
+        MAX(CASE WHEN RN=2 THEN WorkNo END) AS AWorkNo2,
+        MAX(CASE WHEN RN=2 THEN StartTime END) AS AStart2,
+        MAX(CASE WHEN RN=2 THEN EndTime END) AS AEnd2,
+        MAX(CASE WHEN RN=3 THEN WorkNo END) AS AWorkNo3,
+        MAX(CASE WHEN RN=3 THEN StartTime END) AS AStart3,
+        MAX(CASE WHEN RN=3 THEN EndTime END) AS AEnd3,
+        MAX(CASE WHEN RN=4 THEN WorkNo END) AS AWorkNo4,
+        MAX(CASE WHEN RN=4 THEN StartTime END) AS AStart4,
+        MAX(CASE WHEN RN=4 THEN EndTime END) AS AEnd4,
+        MAX(CASE WHEN RN=5 THEN WorkNo END) AS AWorkNo5,
+        MAX(CASE WHEN RN=5 THEN StartTime END) AS AStart5,
+        MAX(CASE WHEN RN=5 THEN EndTime END) AS AEnd5,
+        MAX(CASE WHEN RN=6 THEN WorkNo END) AS AWorkNo6,
+        MAX(CASE WHEN RN=6 THEN StartTime END) AS AStart6,
+        MAX(CASE WHEN RN=6 THEN EndTime END) AS AEnd6,
+        MAX(CASE WHEN RN=7 THEN WorkNo END) AS AWorkNo7,
+        MAX(CASE WHEN RN=7 THEN StartTime END) AS AStart7,
+        MAX(CASE WHEN RN=7 THEN EndTime END) AS AEnd7,
+        MAX(CASE WHEN RN=8 THEN WorkNo END) AS AWorkNo8,
+        MAX(CASE WHEN RN=8 THEN StartTime END) AS AStart8,
+        MAX(CASE WHEN RN=8 THEN EndTime END) AS AEnd8,
+        MAX(CASE WHEN RN=9 THEN WorkNo END) AS AWorkNo9,
+        MAX(CASE WHEN RN=9 THEN StartTime END) AS AStart9,
+        MAX(CASE WHEN RN=9 THEN EndTime END) AS AEnd9,
+        MAX(CASE WHEN RN=10 THEN WorkNo END) AS AWorkNo10,
+        MAX(CASE WHEN RN=10 THEN StartTime END) AS AStart10,
+        MAX(CASE WHEN RN=10 THEN EndTime END) AS AEnd10
+    FROM ARows
+    GROUP BY StaffId, WorkDate
+),
+BExpanded AS (
+    SELECT StaffId, WorkDate,
+        MAX(CASE WHEN RN=1 THEN WorkNo END) AS BWorkNo1,
+        MAX(CASE WHEN RN=1 THEN StartTime END) AS BStart1,
+        MAX(CASE WHEN RN=1 THEN EndTime END) AS BEnd1,
+        MAX(CASE WHEN RN=2 THEN WorkNo END) AS BWorkNo2,
+        MAX(CASE WHEN RN=2 THEN StartTime END) AS BStart2,
+        MAX(CASE WHEN RN=2 THEN EndTime END) AS BEnd2,
+        MAX(CASE WHEN RN=3 THEN WorkNo END) AS BWorkNo3,
+        MAX(CASE WHEN RN=3 THEN StartTime END) AS BStart3,
+        MAX(CASE WHEN RN=3 THEN EndTime END) AS BEnd3,
+        MAX(CASE WHEN RN=4 THEN WorkNo END) AS BWorkNo4,
+        MAX(CASE WHEN RN=4 THEN StartTime END) AS BStart4,
+        MAX(CASE WHEN RN=4 THEN EndTime END) AS BEnd4,
+        MAX(CASE WHEN RN=5 THEN WorkNo END) AS BWorkNo5,
+        MAX(CASE WHEN RN=5 THEN StartTime END) AS BStart5,
+        MAX(CASE WHEN RN=5 THEN EndTime END) AS BEnd5,
+        MAX(CASE WHEN RN=6 THEN WorkNo END) AS BWorkNo6,
+        MAX(CASE WHEN RN=6 THEN StartTime END) AS BStart6,
+        MAX(CASE WHEN RN=6 THEN EndTime END) AS BEnd6,
+        MAX(CASE WHEN RN=7 THEN WorkNo END) AS BWorkNo7,
+        MAX(CASE WHEN RN=7 THEN StartTime END) AS BStart7,
+        MAX(CASE WHEN RN=7 THEN EndTime END) AS BEnd7,
+        MAX(CASE WHEN RN=8 THEN WorkNo END) AS BWorkNo8,
+        MAX(CASE WHEN RN=8 THEN StartTime END) AS BStart8,
+        MAX(CASE WHEN RN=8 THEN EndTime END) AS BEnd8,
+        MAX(CASE WHEN RN=9 THEN WorkNo END) AS BWorkNo9,
+        MAX(CASE WHEN RN=9 THEN StartTime END) AS BStart9,
+        MAX(CASE WHEN RN=9 THEN EndTime END) AS BEnd9,
+        MAX(CASE WHEN RN=10 THEN WorkNo END) AS BWorkNo10,
+        MAX(CASE WHEN RN=10 THEN StartTime END) AS BStart10,
+        MAX(CASE WHEN RN=10 THEN EndTime END) AS BEnd10
+    FROM BRows
+    GROUP BY StaffId, WorkDate
+),
+CExpanded AS (
+    SELECT StaffId, WorkDate,
+        MAX(CASE WHEN RN=1 THEN WorkNo END) AS CWorkNo1,
+        MAX(CASE WHEN RN=1 THEN StartTime END) AS CStart1,
+        MAX(CASE WHEN RN=1 THEN EndTime END) AS CEnd1,
+        MAX(CASE WHEN RN=2 THEN WorkNo END) AS CWorkNo2,
+        MAX(CASE WHEN RN=2 THEN StartTime END) AS CStart2,
+        MAX(CASE WHEN RN=2 THEN EndTime END) AS CEnd2,
+        MAX(CASE WHEN RN=3 THEN WorkNo END) AS CWorkNo3,
+        MAX(CASE WHEN RN=3 THEN StartTime END) AS CStart3,
+        MAX(CASE WHEN RN=3 THEN EndTime END) AS CEnd3,
+        MAX(CASE WHEN RN=4 THEN WorkNo END) AS CWorkNo4,
+        MAX(CASE WHEN RN=4 THEN StartTime END) AS CStart4,
+        MAX(CASE WHEN RN=4 THEN EndTime END) AS CEnd4,
+        MAX(CASE WHEN RN=5 THEN WorkNo END) AS CWorkNo5,
+        MAX(CASE WHEN RN=5 THEN StartTime END) AS CStart5,
+        MAX(CASE WHEN RN=5 THEN EndTime END) AS CEnd5,
+        MAX(CASE WHEN RN=6 THEN WorkNo END) AS CWorkNo6,
+        MAX(CASE WHEN RN=6 THEN StartTime END) AS CStart6,
+        MAX(CASE WHEN RN=6 THEN EndTime END) AS CEnd6,
+        MAX(CASE WHEN RN=7 THEN WorkNo END) AS CWorkNo7,
+        MAX(CASE WHEN RN=7 THEN StartTime END) AS CStart7,
+        MAX(CASE WHEN RN=7 THEN EndTime END) AS CEnd7,
+        MAX(CASE WHEN RN=8 THEN WorkNo END) AS CWorkNo8,
+        MAX(CASE WHEN RN=8 THEN StartTime END) AS CStart8,
+        MAX(CASE WHEN RN=8 THEN EndTime END) AS CEnd8,
+        MAX(CASE WHEN RN=9 THEN WorkNo END) AS CWorkNo9,
+        MAX(CASE WHEN RN=9 THEN StartTime END) AS CStart9,
+        MAX(CASE WHEN RN=9 THEN EndTime END) AS CEnd9,
+        MAX(CASE WHEN RN=10 THEN WorkNo END) AS CWorkNo10,
+        MAX(CASE WHEN RN=10 THEN StartTime END) AS CStart10,
+        MAX(CASE WHEN RN=10 THEN EndTime END) AS CEnd10
+    FROM CRows
+    GROUP BY StaffId, WorkDate
+),
+
+/*-----------------------------------------
+  重複件数＋重複ID（AA/BB/CC/AB/AC/BC）
+-----------------------------------------*/
+OverlapDetails AS (
+    SELECT
+        s.StaffId,
+        s.WorkDate,
+
+        /* A-A */
+        (SELECT COUNT(*) FROM TableA a1 JOIN TableA a2
+         ON a1.StaffId=s.StaffId AND a2.StaffId=s.StaffId
+        AND a1.WorkDate=s.WorkDate AND a2.WorkDate=s.WorkDate
+        AND a1.Id<a2.Id AND a1.StartTime<a2.EndTime AND a1.EndTime>a2.StartTime) AS CntAA,
+
+        (SELECT STRING_AGG(CONVERT(VARCHAR,a1.Id), ',')
+         FROM TableA a1 JOIN TableA a2
+         ON a1.StaffId=s.StaffId AND a2.StaffId=s.StaffId
+        AND a1.WorkDate=s.WorkDate AND a2.WorkDate=s.WorkDate
+        AND a1.Id<a2.Id AND a1.StartTime<a2.EndTime AND a1.EndTime>a2.StartTime) AS IdsAA,
+
+        /* B-B */
+        (SELECT COUNT(*) FROM TableB b1 JOIN TableB b2
+         ON b1.StaffId=s.StaffId AND b2.StaffId=s.StaffId
+        AND b1.WorkDate=s.WorkDate AND b2.WorkDate=s.WorkDate
+        AND b1.Id<b2.Id AND b1.StartTime<b2.EndTime AND b1.EndTime>b2.StartTime) AS CntBB,
+
+        (SELECT STRING_AGG(CONVERT(VARCHAR,b1.Id), ',')
+         FROM TableB b1 JOIN TableB b2
+         ON b1.StaffId=s.StaffId AND b2.StaffId=s.StaffId
+        AND b1.WorkDate=s.WorkDate AND b2.WorkDate=s.WorkDate
+        AND b1.Id<b2.Id AND b1.StartTime<b2.EndTime AND b1.EndTime>b2.StartTime) AS IdsBB,
+
+        /* C-C */
+        (SELECT COUNT(*) FROM TableC c1 JOIN TableC c2
+         ON c1.StaffId=s.StaffId AND c2.StaffId=s.StaffId
+        AND c1.WorkDate=s.WorkDate AND c2.WorkDate=s.WorkDate
+        AND c1.Id<c2.Id AND c1.StartTime<c2.EndTime AND c1.EndTime>c2.StartTime) AS CntCC,
+
+        (SELECT STRING_AGG(CONVERT(VARCHAR,c1.Id), ',')
+         FROM TableC c1 JOIN TableC c2
+         ON c1.StaffId=s.StaffId AND c2.StaffId=s.StaffId
+        AND c1.WorkDate=s.WorkDate AND c2.WorkDate=s.WorkDate
+        AND c1.Id<c2.Id AND c1.StartTime<c2.EndTime AND c1.EndTime>c2.StartTime) AS IdsCC,
+
+        /* A-B */
+        (SELECT COUNT(*) FROM TableA a JOIN TableB b
+         ON a.StaffId=s.StaffId AND b.StaffId=s.StaffId
+        AND a.WorkDate=s.WorkDate AND b.WorkDate=s.WorkDate
+        AND a.StartTime<b.EndTime AND a.EndTime>b.StartTime) AS CntAB,
+
+        (SELECT STRING_AGG(CONCAT(a.Id,'-',b.Id), ',')
+         FROM TableA a JOIN TableB b
+         ON a.StaffId=s.StaffId AND b.StaffId=s.StaffId
+        AND a.WorkDate=s.WorkDate AND b.WorkDate=s.WorkDate
+        AND a.StartTime<b.EndTime AND a.EndTime>b.StartTime) AS IdsAB,
+
+        /* A-C */
+        (SELECT COUNT(*) FROM TableA a JOIN TableC c
+         ON a.StaffId=s.StaffId AND c.StaffId=s.StaffId
+        AND a.WorkDate=s.WorkDate AND c.WorkDate=s.WorkDate
+        AND a.StartTime<c.EndTime AND a.EndTime>c.StartTime) AS CntAC,
+
+        (SELECT STRING_AGG(CONCAT(a.Id,'-',c.Id), ',')
+         FROM TableA a JOIN TableC c
+         ON a.StaffId=s.StaffId AND c.StaffId=s.StaffId
+        AND a.WorkDate=s.WorkDate AND c.WorkDate=s.WorkDate
+        AND a.StartTime<c.EndTime AND a.EndTime>c.StartTime) AS IdsAC,
+
+        /* B-C */
+        (SELECT COUNT(*) FROM TableB b JOIN TableC c
+         ON b.StaffId=s.StaffId AND c.StaffId=s.StaffId
+        AND b.WorkDate=s.WorkDate AND c.WorkDate=s.WorkDate
+        AND b.StartTime<c.EndTime AND b.EndTime>c.StartTime) AS CntBC,
+
+        (SELECT STRING_AGG(CONCAT(b.Id,'-',c.Id), ',')
+         FROM TableB b JOIN TableC c
+         ON b.StaffId=s.StaffId AND c.StaffId=s.StaffId
+        AND b.WorkDate=s.WorkDate AND c.WorkDate=s.WorkDate
+        AND b.StartTime<c.EndTime AND b.EndTime>c.StartTime) AS IdsBC
+    FROM StaffDates s
+),
+
+/*-----------------------------------------
+  主テーブル整合性チェック（3パターン切替）
+-----------------------------------------*/
+MainCheck AS (
+    SELECT
+        s.StaffId,
+        s.WorkDate,
+
+        /* ▼ ABeforeStart */
+        CASE 
+            WHEN m.StaffId IS NULL THEN
+                CASE @MainMissingMode WHEN 0 THEN 0 WHEN 1 THEN 1 WHEN 2 THEN NULL END
+            WHEN EXISTS (
+                SELECT 1 FROM TableA a
+                WHERE a.StaffId = s.StaffId
+                  AND a.WorkDate = s.WorkDate
+                  AND a.StartTime < m.StartTime
+            ) THEN 1 ELSE 0 
+        END AS ABeforeStart,
+
+        /* ▼ AAfterEnd */
+        CASE 
+            WHEN m.StaffId IS NULL THEN
+                CASE @MainMissingMode WHEN 0 THEN 0 WHEN 1 THEN 1 WHEN 2 THEN NULL END
+            WHEN EXISTS (
+                SELECT 1 FROM TableA a
+                WHERE a.StaffId = s.StaffId
+                  AND a.WorkDate = s.WorkDate
+                  AND a.EndTime > m.EndTime
+            ) THEN 1 ELSE 0 
+        END AS AAfterEnd,
+
+        /* ▼ BBeforeStart */
+        CASE 
+            WHEN m.StaffId IS NULL THEN
+                CASE @MainMissingMode WHEN 0 THEN 0 WHEN 1 THEN 1 WHEN 2 THEN NULL END
+            WHEN EXISTS (
+                SELECT 1 FROM TableB b
+                WHERE b.StaffId = s.StaffId
+                  AND b.WorkDate = s.WorkDate
+                  AND b.StartTime < m.StartTime
+            ) THEN 1 ELSE 0 
+        END AS BBeforeStart,
+
+        /* ▼ BAfterEnd */
+        CASE 
+            WHEN m.StaffId IS NULL THEN
+                CASE @MainMissingMode WHEN 0 THEN 0 WHEN 1 THEN 1 WHEN 2 THEN NULL END
+            WHEN EXISTS (
+                SELECT 1 FROM TableB b
+                WHERE b.StaffId = s.StaffId
+                  AND b.WorkDate
+ 

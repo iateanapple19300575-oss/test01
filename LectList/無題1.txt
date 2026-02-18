@@ -1,0 +1,182 @@
+① CSV 読込（DataTable）
+② BulkCopy → WorkTable（予定 or 実績）
+③ MERGE（実績を予定に反映）
+④ VIEW（DailyWorkView）で重複チェック・整合性チェック
+⑤ SELECT INTO DailyWorkViewTable（テーブル化）
+⑥ DataGridView（VirtualMode）で高速表示
+
+
+CREATE TABLE DailyWorkViewTable (
+    StaffId        VARCHAR(20),
+    WorkDate       DATE,
+    MainStart      DATETIME,
+    MainEnd        DATETIME,
+    AMinStart      DATETIME,
+    AMaxEnd        DATETIME,
+    BMinStart      DATETIME,
+    BMaxEnd        DATETIME,
+    CMinStart      DATETIME,
+    CMaxEnd        DATETIME,
+    CntAA          INT,
+    CntBB          INT,
+    CntCC          INT,
+    CntAB          INT,
+    CntAC          INT,
+    CntBC          INT,
+    ABeforeStart   INT,
+    AAfterEnd      INT,
+    BBeforeStart   INT,
+    BAfterEnd      INT,
+    CBeforeStart   INT,
+    CAfterEnd      INT,
+    ErrorMessage   VARCHAR(MAX)
+);
+
+
+CREATE VIEW DailyWorkView AS
+SELECT
+    W.StaffId,
+    W.WorkDate,
+    W.MainStart,
+    W.MainEnd,
+    MIN(A.StartTime) AS AMinStart,
+    MAX(A.EndTime)   AS AMaxEnd,
+    MIN(B.StartTime) AS BMinStart,
+    MAX(B.EndTime)   AS BMaxEnd,
+    MIN(C.StartTime) AS CMinStart,
+    MAX(C.EndTime)   AS CMaxEnd,
+
+    -- 重複チェック（簡易版）
+    0 AS CntAA,
+    0 AS CntBB,
+    0 AS CntCC,
+    0 AS CntAB,
+    0 AS CntAC,
+    0 AS CntBC,
+
+    -- 整合性チェック（簡易版）
+    CASE WHEN MIN(A.StartTime) < W.MainStart THEN 1 ELSE 0 END AS ABeforeStart,
+    CASE WHEN MAX(A.EndTime)   > W.MainEnd   THEN 1 ELSE 0 END AS AAfterEnd,
+    0 AS BBeforeStart,
+    0 AS BAfterEnd,
+    0 AS CBeforeStart,
+    0 AS CAfterEnd,
+
+    CASE
+        WHEN W.MainStart IS NULL THEN '出勤時間が未入力'
+        WHEN W.MainEnd   IS NULL THEN '退勤時間が未入力'
+        ELSE ''
+    END AS ErrorMessage
+
+FROM WorkTable W
+LEFT JOIN WorkA A ON W.Id = A.WorkId
+LEFT JOIN WorkB B ON W.Id = B.WorkId
+LEFT JOIN WorkC C ON W.Id = C.WorkId
+GROUP BY
+    W.StaffId, W.WorkDate, W.MainStart, W.MainEnd;
+    
+    
+    
+
+MERGE INTO WorkTable AS T
+USING TempActual AS S
+ON T.StaffId = S.StaffId AND T.WorkDate = S.WorkDate
+WHEN MATCHED THEN
+    UPDATE SET
+        T.MainStart = S.MainStart,
+        T.MainEnd   = S.MainEnd;
+
+
+Private Function LoadCsvToDataTable(path As String) As DataTable
+
+    Dim dt As New DataTable()
+    dt.Columns.Add("StaffId", GetType(String))
+    dt.Columns.Add("WorkDate", GetType(Date))
+    dt.Columns.Add("MainStart", GetType(Date))
+    dt.Columns.Add("MainEnd", GetType(Date))
+
+    Using sr As New StreamReader(path, Encoding.UTF8)
+        sr.ReadLine() ' ヘッダスキップ
+
+        While Not sr.EndOfStream
+            Dim line = sr.ReadLine()
+            Dim cols = line.Split(","c)
+
+            Dim row = dt.NewRow()
+            row("StaffId") = cols(0)
+            row("WorkDate") = Date.Parse(cols(1))
+            row("MainStart") = If(cols(2) = "", DBNull.Value, Date.Parse(cols(2)))
+            row("MainEnd") = If(cols(3) = "", DBNull.Value, Date.Parse(cols(3)))
+
+            dt.Rows.Add(row)
+        End While
+    End Using
+
+    Return dt
+
+End Function
+
+
+Private Sub BulkInsertActual(dt As DataTable)
+
+    Using cn As New SqlConnection(_connStr)
+        cn.Open()
+
+        Using bc As New SqlBulkCopy(cn)
+            bc.DestinationTableName = "TempActual"
+            bc.WriteToServer(dt)
+        End Using
+
+    End Using
+
+End Sub
+
+
+Private Sub MergeActual()
+
+    Dim sql As String = "
+MERGE INTO WorkTable AS T
+USING TempActual AS S
+ON T.StaffId = S.StaffId AND T.WorkDate = S.WorkDate
+WHEN MATCHED THEN
+    UPDATE SET
+        T.MainStart = S.MainStart,
+        T.MainEnd   = S.MainEnd;
+"
+
+    Using cn As New SqlConnection(_connStr)
+        cn.Open()
+        Using cmd As New SqlCommand(sql, cn)
+            cmd.ExecuteNonQuery()
+        End Using
+    End Using
+
+End Sub
+
+
+Private Sub BuildDailyWorkView(startDate As Date, endDate As Date)
+
+    Using cn As New SqlConnection(_connStr)
+        cn.Open()
+
+        Dim sql As String = "
+IF OBJECT_ID('DailyWorkViewTable') IS NOT NULL
+    DROP TABLE DailyWorkViewTable;
+
+SELECT *
+INTO DailyWorkViewTable
+FROM DailyWorkView
+WHERE WorkDate BETWEEN @Start AND @End;
+"
+
+        Using cmd As New SqlCommand(sql, cn)
+            cmd.Parameters.AddWithValue("@Start", startDate)
+            cmd.Parameters.AddWithValue("@End", endDate)
+            cmd.ExecuteNonQuery()
+        End Using
+
+    End Using
+
+End Sub
+
+

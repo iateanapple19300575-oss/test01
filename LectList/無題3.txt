@@ -1,0 +1,101 @@
+① SQL：テーブル作成（WorkTable / WorkA / WorkB / WorkC / DailyWorkViewTable）
+② SQL：VIEW（DailyWorkView）
+③ VB.NET：CSV → DataTable
+④ VB.NET：BulkCopy → TempActual
+⑤ SQL：MERGE（実績を予定に反映）
+⑥ SQL：VIEW → DailyWorkViewTable（SELECT INTO）
+⑦ VB.NET：VirtualMode + Structure 配列で高速表示
+
+
+Private Function LoadCsvToDataTable(path As String) As DataTable
+
+    Dim dt As New DataTable()
+    dt.Columns.Add("StaffId", GetType(String))
+    dt.Columns.Add("WorkDate", GetType(Date))
+    dt.Columns.Add("MainStart", GetType(Date))
+    dt.Columns.Add("MainEnd", GetType(Date))
+
+    Using sr As New StreamReader(path, Encoding.UTF8)
+        sr.ReadLine() ' ヘッダスキップ
+
+        While Not sr.EndOfStream
+            Dim cols = sr.ReadLine().Split(","c)
+            Dim row = dt.NewRow()
+
+            row("StaffId") = cols(0)
+            row("WorkDate") = Date.Parse(cols(1))
+            row("MainStart") = If(cols(2) = "", DBNull.Value, Date.Parse(cols(2)))
+            row("MainEnd") = If(cols(3) = "", DBNull.Value, Date.Parse(cols(3)))
+
+            dt.Rows.Add(row)
+        End While
+    End Using
+
+    Return dt
+
+End Function
+
+
+Private Sub BulkInsertActual(dt As DataTable)
+
+    Using cn As New SqlConnection(_connStr)
+        cn.Open()
+
+        Using bc As New SqlBulkCopy(cn)
+            bc.DestinationTableName = "TempActual"
+            bc.WriteToServer(dt)
+        End Using
+
+    End Using
+
+End Sub
+
+
+Private Sub MergeActual()
+
+    Dim sql As String = "
+MERGE INTO WorkTable AS T
+USING TempActual AS S
+ON T.StaffId = S.StaffId AND T.WorkDate = S.WorkDate
+WHEN MATCHED THEN
+    UPDATE SET
+        T.MainStart = S.MainStart,
+        T.MainEnd   = S.MainEnd;
+"
+
+    Using cn As New SqlConnection(_connStr)
+        cn.Open()
+        Using cmd As New SqlCommand(sql, cn)
+            cmd.ExecuteNonQuery()
+        End Using
+    End Using
+
+End Sub
+
+
+Private Sub BuildDailyWorkView(startDate As Date, endDate As Date)
+
+    Using cn As New SqlConnection(_connStr)
+        cn.Open()
+
+        Dim sql As String = "
+IF OBJECT_ID('DailyWorkViewTable') IS NOT NULL
+    DROP TABLE DailyWorkViewTable;
+
+SELECT *
+INTO DailyWorkViewTable
+FROM DailyWorkView
+WHERE WorkDate BETWEEN @Start AND @End;
+"
+
+        Using cmd As New SqlCommand(sql, cn)
+            cmd.Parameters.AddWithValue("@Start", startDate)
+            cmd.Parameters.AddWithValue("@End", endDate)
+            cmd.ExecuteNonQuery()
+        End Using
+
+    End Using
+
+End Sub
+
+
